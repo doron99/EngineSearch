@@ -1,0 +1,236 @@
+﻿@{
+    ViewData["Title"] = "Home Page";
+}
+<div class="container">
+    
+            <div class="row mb-2">
+                <div class="text-center text-capitalize h3 ">
+                    Google & Bing Engine Search
+                </div>
+            </div>
+            <div class="row" style="display:none;">
+                <div class="" >
+                    start from<input id="pageNumber" type="text" value="1" style="width:30px" />
+                    (increment every search)
+                    | page size<input id="pageSize" type="text" value="5" style="width:30px" />
+                </div>
+            </div>
+    
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="input-group mb-3">
+                        <input type="text" id="inpSearchTxt" class="form-control">
+                        <div class="input-group-prepend">
+                            <button onclick="search();" class="btn btn-outline-secondary" type="button">Search</button>
+                        </div>
+
+                    </div>
+                </div>
+                <div class="col-md-6 ">
+                    <div>
+                        <span>View results as </span>
+                        <button onclick="changeResultsView('list');" class="btn btn-outline-secondary" type="button">List</button>
+                        <button onclick="changeResultsView('cards');" class="btn btn-outline-secondary" type="button">Cards</button>
+                        <span class="ml-2">Filter</span>
+                        
+                        <select class="form-select form-select"
+                                aria-label=".form-select-sm"
+                                style="display: inline-block; width: unset;">
+                            <option selected value="-1">All</option>
+                            <option value="0">Google</option>
+                            <option value="1">Bing</option>
+                        </select>
+
+                    </div>
+                   
+                </div>
+            </div>
+            <div class="row">
+                <div id="results" style="max-height: 500px; overflow-y: scroll; display: flex; flex-flow: row wrap;">
+
+                </div>
+            </div>
+                    
+            <div id="overlay" style="">
+            </div>
+
+                </div>
+                <script>
+                    const GOOGLE_ENGINE_TYPE = 0;
+                    const BING_ENGINE_TYPE = 1;
+
+                    //hold the value we search on
+                    //that when it changed, we must reset the other criteria of search (page number,page count)
+                    let currSearch = '';
+
+                    let strResultsViewConfig = 'list';
+                    let blnFlagStopListener = false;
+                    let intFilterMode = -1; //both,google,bing
+                    ////////////////////////////// -1 , 0    ,  1
+                    function doSearch(searchTxt, pageNumber, pageSize) {
+
+                        return fetch(`/api/search/doSearch/${searchTxt}/${pageNumber}/${pageSize}`, {
+                            method: 'GET',
+                            headers: { 'Content-Type': 'application/json' }
+                        })
+                            .then(response => response.json())
+                    }
+                    //only 2 options
+                    function changeResultsView(view) {
+                        if (view == 'list') {
+                            $("#results div.result-card").addClass("w-100");
+                            $("#results div.result-card").removeClass("w-50");
+                            strResultsViewConfig = 'list';
+                        } else { //cards
+                            $("#results div.result-card").removeClass("w-100");
+                            $("#results div.result-card").addClass("w-50");
+                            strResultsViewConfig = 'card';
+                        }
+                    }
+                    function getCardWidthClassBasedOnViewConfigure() {
+                        return strResultsViewConfig == 'list' ? 'w-100' : 'w-50';
+                    }
+                    function doSearchWithParams(searchTxt, pageNumber, pageSize) {
+                        doSearch(searchTxt, pageNumber, pageSize).then(res => {
+                            console.log(res);
+                            const currWidth = getCardWidthClassBasedOnViewConfigure();
+                            for (var i = 0; i < res.length; i++) {
+                                let svgEngine = getSvcEngineName(res[i].searchEngine);
+                                console.log('intFilterMode: ', intFilterMode, 'svgEngine', res[i].searchEngine);
+                                let displayNone =
+                                    ((intFilterMode == 0 && res[i].searchEngine == 1) || (intFilterMode == 1 && res[i].searchEngine == 0))
+                                        ? "style='display:none'"
+                                        : "";
+                                let el = `
+                                    <div class="result-card col-md-6 col-sm-12 ${currWidth} ${svgEngine}" ${displayNone}>
+                                    <div class=" card">
+                                      <div class="card-body">
+                                        <p>
+                                            <object type="image/svg+xml" data="/icons/${svgEngine}.svg"></object>
+                                        </p>
+                                        <blockquote class="blockquote mb-0">
+                                          <p>${res[i].title}</p>
+                                          <footer class="blockquote-footer">${res[i].enteredDateFormatted}</footer>
+                                        </blockquote>
+                                      </div>
+                                      </div>
+                                    </div>
+
+                                    `
+                                $('#results').append(el);
+                            }
+                            setPageState('available');
+                        });
+                    }
+                    function setPageState(state) {
+                        if (state === 'busy') {
+                            blnFlagStopListener = true;
+                            $('#overlay').show();
+                            setScrollListenerOff();
+                        } else {
+                            $('#overlay').hide();
+                            setScrollListenerOn();
+                            blnFlagStopListener = false;
+                        }
+                    }
+                    function chk_scroll(e) {
+                        console.log('scrolling');
+                        var elem = $(e.currentTarget);
+                        //console.log(elem[0].scrollHeight - elem.scrollTop(), 'equals', elem.outerHeight())
+                        if (elem[0].scrollHeight - elem.scrollTop() < (elem.outerHeight() + 5)) {
+                            if (blnFlagStopListener == true) {
+                                return;
+                            } else {
+                                setPageState('busy');
+                                console.log("bottom");
+
+                                search();
+                            }
+
+
+                        }
+                    }
+                    function getSvcEngineName(intEngineType) {
+
+                        let svgEngine = '';
+                        if (intEngineType == GOOGLE_ENGINE_TYPE)
+                            svgEngine = 'google';
+                        else if (intEngineType == BING_ENGINE_TYPE)
+                            svgEngine = 'bing'
+                        else
+                            svgEngine = 'futureEngine';
+
+                        return svgEngine;
+                    }
+                    function setScrollListenerOn() {
+                        $('#results').on('scroll', chk_scroll);
+
+                    }
+                    function setScrollListenerOff() {
+                        $('#results').off('scroll');
+                    }
+
+                    $(document).ready(() => {
+                        setScrollListenerOn();
+                        setResultFilterSelectEvent();
+                    })
+                    function setResultFilterSelectEvent() {
+                        $('select').on('change', function () {
+                            intFilterMode = +this.value;
+                            switch (intFilterMode) {
+                                case -1:
+                                    $("#results div.result-card.bing").show();
+                                    $("#results div.result-card.google").show();
+                                    break;
+                                case 0:
+                                    $("#results div.result-card.bing").hide();
+                                    $("#results div.result-card.google").show();
+                                    break;
+                                case 1:
+                                    $("#results div.result-card.bing").show();
+                                    $("#results div.result-card.google").hide();
+                                    break;
+                                default:
+                                // code block
+                            }
+                        });
+                    }
+                    function search() {
+                        if ($('#inpSearchTxt').val().length == 0) {
+                            alert('text field is mandatory');
+                            return;
+                        }
+                        if (currSearch.length == 0) {
+                            currSearch = $('#inpSearchTxt').val();
+                        }
+                        if ($('#inpSearchTxt').val() != currSearch) {
+                            currSearch = $('#inpSearchTxt').val();
+                            $('#pageNumber').val(1);
+                            $('#pageSize').val(5);
+                            $('#results').empty();
+                        }
+                            
+                        $('#overlay').show();
+                        doSearchWithParams($('#inpSearchTxt').val(), $('#pageNumber').val(), $('#pageSize').val());
+                        const pageNumber = $('#pageNumber').val()
+                        $('#pageNumber').val(+pageNumber + 5);
+                    }
+
+
+                </script>
+                <style>
+                    #overlay {
+                        display: none;
+                        position: fixed;
+                        z-index: 1000;
+                        width: 100%;
+                        height: 100%;
+                        left: 0;
+                        top: 0;
+                        background: rgba(0,0,0,0.1)
+                    }
+                    .result-card {
+                        padding:15px;
+                    }
+                    
+                </style>
